@@ -1,0 +1,364 @@
+---
+title: "Cyclistic Tripdata Case Study"
+author: "Sagnik Chand"
+date: "2023-08-03"
+---
+
+
+## Processing the Data
+
+The processing stage involves cleaning the data after confirming that it is from a good source and it satisfies the necessary conditions.It also involves confirming that the data is complete, correct and relevant. I chose R studios as the tool to help me with this phase of the analysis process. I started by installing and then loading the relevant packages. 
+
+```{r Installing and loading packages}
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+install.packages("janitor", repos = "http://cran.us.r-project.org")
+install.packages("lubridate", repos = "http://cran.us.r-project.org")
+install.packages("janitor", repos = "http://cran.us.r-project.org")
+install.packages("readr", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+library(lubridate)
+library(skimr)
+library(janitor)
+library(readr)
+```
+Now, I will load the datasets into the environment while applying appropriate naming conventions.
+
+```{r Loading the datasets}
+
+November_2020 <- read_csv("202011-divvy-tripdata.csv")
+December_2020 <- read_csv("202012-divvy-tripdata.csv")
+January_2021 <- read_csv("202101-divvy-tripdata.csv")
+February_2021 <- read_csv("202102-divvy-tripdata.csv")
+March_2021 <- read_csv("202103-divvy-tripdata.csv")
+April_2021 <- read_csv("202104-divvy-tripdata.csv")
+May_2021 <- read_csv("202105-divvy-tripdata.csv")
+June_2021 <- read_csv("202106-divvy-tripdata.csv")
+July_2021 <- read_csv("202107-divvy-tripdata.csv")
+August_2021 <- read_csv("202108-divvy-tripdata.csv")
+September_2021 <- read_csv("202109-divvy-tripdata.csv")
+October_2021 <- read_csv("202110-divvy-tripdata.csv")
+
+```
+
+Next we will combine all of these datasets into a single dataframe for further analysis. I have already validated that the datasets contain same column names using colname() function.
+
+```{r Checking column names for consistency}
+colnames(November_2020)
+colnames(January_2021)
+colnames(October_2021)
+```
+
+We can preview the overall structure of these datasets using the str() function. It will help us confirm that these datasets share similar data types.
+
+```{r Overviewing the structure and verifying data types}
+str(December_2020)
+str(February_2021)
+str(November_2020)
+```
+
+We can use the compare_df_cols() function to confirm that the data types are consistent through all of the datasets.
+
+```{r Confirming data type consistency}
+compare_df_cols(November_2020,December_2020,January_2021,February_2021,March_2021,April_2021,May_2021,June_2021,July_2021,August_2021,September_2021,October_2021, return = "mismatch")
+```
+
+The above function confirms that there are 2 mismatched datatypes across all the datasets. The start_station_id and end_station_id in the November_2020 dataset are set to numeric data type rather then character. We can convert these columns to character datatype using the as.character() function.
+
+```{r Converting data type for consistency}
+November_2020$start_station_id <- as.character(November_2020$start_station_id)
+November_2020$end_station_id <- as.character(November_2020$end_station_id)
+```
+
+Now we can use the compare_df_cols again and make sure that all the data types are consistent.
+
+```{r Confirmed correct data types}
+compare_df_cols(November_2020,December_2020,January_2021,February_2021,March_2021,April_2021,May_2021,June_2021,July_2021,August_2021,September_2021,October_2021, return = "mismatch")
+```
+
+
+We can combine all of these datasets into a single data frame by using the bind_rows() function. This will stack these datasets ontop of one another.
+
+```{r Combining all of the datasets into a single data frame}
+combined_trips <- bind_rows(November_2020,December_2020,January_2021,February_2021,March_2021,April_2021,May_2021,June_2021,July_2021,August_2021,September_2021,October_2021)
+```
+
+Let's run some functions to review a quick summary of our final data frame.
+
+```{r Summary at a glance}
+str(combined_trips)
+head(combined_trips)
+skim_without_charts(combined_trips)
+dim(combined_trips)
+```
+
+Up next, we will create columns that will extract the day, month, year and day of the week for each trip using the as.Date() and format() function on the "started_at" time column.
+
+```{r Extracting day, month, year and day of the week for each trip}
+combined_trips$date <- as.Date(combined_trips$started_at)
+combined_trips$month <- format(as.Date(combined_trips$date), "%m")
+combined_trips$day <- format(as.Date(combined_trips$date), "%d")
+combined_trips$year <- format(as.Date(combined_trips$date), "%Y")
+combined_trips$day_of_the_week <- weekdays(combined_trips$date)
+head(combined_trips)    ## Confirming that the newly added columns are correct.
+```
+
+We will add another column to our data frame named ride_length. This column will display the total duration of each trip. We can calculate this from the time difference between the "started_at" and "ended_at" columns for each trip.
+
+```{r Calculating duration of each trip in minutes}
+combined_trips$ride_length <- difftime(combined_trips$ended_at, combined_trips$started_at, units = "min")
+```
+
+In order to perform meaningful arithmetic analysis, we need to change the data type of the ride_length column to numeric and round up the decimal points to two places.
+
+```{r Changing data type and rounding decimal places}
+combined_trips$ride_length <- as.numeric(as.character(combined_trips$ride_length))
+combined_trips$ride_length <- round(combined_trips$ride_length, 2)
+```
+
+Before proceeding to the cleaning phase, we will check the structure of the data frame for data type consistency.
+
+```{r}
+str(combined_trips)
+```
+
+## Cleaning the Data
+
+Data cleaning is the process of fixing incorrect, incomplete, duplicate or otherwise erroneous data in a data set. In a real world scenario, I would inquire the primary stakeholders or my superiors about what specific data cleaning procedures I'm allowed to carry out on the data. To retain the integrity of our original data frame, I created a duplicate of the original dataset where I can perform all data cleaning procedures.
+
+```{r Creating a duplicate data frame and removing all null values}
+combined_trips_V2 <- drop_na(combined_trips)
+```
+
+We need to remove the trips which have a negative ride_length as logically the end time can not be earlier than the start time. We can achieve this by using the filter() function.
+
+```{r Filtering out trips with negative ride length}
+combined_trips_V2 <- filter(combined_trips_V2, ride_length > 0)
+```
+
+Now we will extract and store the latitude and longitude data in a separate data frame as it is not relevant to our current analysis. We will then remove these columns from our current working data frame.
+
+```{r Extracting latitude and longitude data}
+lat_long <- select(combined_trips_V2, start_station_name, end_station_name, start_lat, start_lng, end_lat, end_lng, member_casual)
+combined_trips_V2 <- combined_trips_V2 %>% 
+  select (-c(start_lat, start_lng, end_lat, end_lng))
+head(combined_trips_V2)
+```
+
+We have confirmed that our data is consistent and in correct format without any missing or erroneous values. Now, we can move onto the next phase of the data analysis process : Analysis !!
+
+# Analysing the Data
+
+Analysis is the process where we make sense of the data we have collected. The primary goal in this phase is to find the relationships, trends, and patterns that will help us solve our business task more effectively. Our main objective for this analysis is to figure out the behavioural pattern of cyclist members and cyclist casuals with regards to their riding habits.
+
+Let's start with some descriptive analysis to better understand our data.
+
+### Descriptive Analysis
+
+```{r Calculating number of rides and average ride length segmented by rider type}
+combined_trips_V2 %>% 
+  group_by(member_casual) %>% 
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length))
+```
+
+```{r Counting number of rideable type and distributing using rider type}
+combined_trips_V2 %>% 
+  count(rideable_type)
+combined_trips_V2 %>%
+  group_by(member_casual) %>% 
+  count(rideable_type)
+```
+
+```{r Provides a quick summary of the ride length}
+summary(combined_trips_V2$ride_length)
+```
+
+```{r Calculating the average, minimum, maximum and median ride length for each rider type}
+combined_trips_V2 %>% 
+  group_by(member_casual) %>% 
+  summarise(number_of_rides = n(), min_ride_length = min(ride_length), max_ride_length = max(ride_length), average_ride_length = mean(ride_length), median_ride_length = median(ride_length))
+```
+
+Now we will order the months from November 2020 to October 2021 and the days of the week from Sunday to Saturday as factors. This will help us to segregate the data for our analysis.
+
+```{r Ordering the variables as factors}
+combined_trips_V2$month <- ordered(combined_trips_V2$month, levels=c( "November", "December","January", "February", "March", "April","May","June", "July", "August", "September", "October"))
+
+combined_trips_V2$day_of_the_week <- ordered(combined_trips_V2$day_of_the_week, levels=c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))
+```
+
+```{r}
+combined_trips_V2 %>% 
+  group_by(member_casual, month) %>% 
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>% 
+  arrange(month)
+
+combined_trips_V2 %>% 
+  group_by(member_casual, day_of_the_week) %>% 
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>% 
+  arrange(day_of_the_week)
+
+```
+
+Next we will find out the most popular start and end stations for casual riders.
+
+```{r Calculating most popular start and end stations for casual riders}
+combined_trips_V2 %>% 
+  group_by(member_casual, start_station_name) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  filter(member_casual == "casual") %>% 
+  select(start_station_name, number_of_rides)
+
+combined_trips_V2 %>% 
+  group_by(member_casual, end_station_name) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  filter(member_casual == "casual") %>% 
+  select(end_station_name, number_of_rides)
+```
+
+We can perform the same step to find out the most popular start and end stations for member riders as well.
+
+```{r Calculating most popular start and end stations for member rider}
+combined_trips_V2 %>% 
+  group_by(member_casual, start_station_name) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  filter(member_casual == "member") %>% 
+  select(start_station_name, number_of_rides)
+
+combined_trips_V2 %>% 
+  group_by(member_casual, end_station_name) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  filter(member_casual == "member") %>% 
+  select(end_station_name, number_of_rides)
+```
+
+We will create another version of our data frame which combines the start_station_name and end_station_name columns into a single column aggregating the ride route for each trip.
+
+```{r Generating ride_routes column by uniting start_station_name and end_station_name}
+combined_trips_v3 <- (unite(combined_trips_V2, "ride_routes", start_station_name, end_station_name, sep= " to "))
+head(combined_trips_v3)
+```
+
+Now, let's extract data about the most used ride routes and segregate them using rider type. This data will be useful for creating visualizations on Tableau.
+
+```{r Calculating top routes used by diferent rider type}
+top_routes <- combined_trips_v3 %>% 
+  group_by(ride_routes) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides))
+head(top_routes, 10)
+
+top_routes_1 <- combined_trips_v3 %>% 
+  group_by(ride_routes, member_casual) %>% 
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides))
+head(top_routes1, 10)
+```
+
+## Visualizations
+
+The primary goal of data visualization is to make it easier to identify patterns and trends in our data. We will also use tableau to better visualize and acquire useful insights.
+
+### Number of rides and average ride length segmented by rider type
+
+```{r Average ride length by Rider type}
+combined_trips_v3 %>% 
+  group_by(member_casual) %>% 
+  summarise(Average_ride_length = mean(ride_length)) %>% 
+  ggplot(mapping = aes(x = member_casual, y = Average_ride_length, fill = member_casual)) + geom_col() + labs(title = "Average ride length by Rider type", x="Rider type", y="Average ride length")
+```
+
+```{r Number of rides per month segmented by rider type}
+combined_trips_v3 %>% 
+  group_by(member_casual, month) %>% 
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot (aes(x = month, y = number_of_rides, fill = member_casual)) + geom_col(position = "dodge2") + labs(title = "Number of rides per month segmented by rider type", x = "Month", y ="Number of rides")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r Average ride length per month segmented by rider type}
+combined_trips_v3 %>%
+  group_by(member_casual, month) %>%
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot (aes(x = month, y = average_ride_length, fill = member_casual)) + geom_col(position = "dodge2") + labs(title = "Average ride length per month segmented by rider type", x = "Month", y ="Average ride length")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r Number of rides per day of the week segmented by rider type}
+combined_trips_v3 %>%
+  group_by(member_casual, day_of_the_week) %>%
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot(aes(x = day_of_the_week, y=number_of_rides, fill = member_casual)) + geom_col(position = "dodge2") + labs(title = "Number of rides per day of the week segmented by rider type", x = "Day of the week", y = "Number of rides")
+```
+
+```{r Average ride length per week day segmented by rider type}
+combined_trips_v3 %>%
+  group_by(member_casual, day_of_the_week) %>%
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot (aes(x = day_of_the_week, y = average_ride_length, fill=member_casual)) + geom_col(position = "dodge2") + labs(title = "Average ride length per week day segmented by rider type", x = "Day of the week", y ="Average ride length")+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+### Number of rides and average ride length segmented by rideable type
+
+```{r Number of rides per rideable type}
+combined_trips_v3 %>%
+  group_by(rideable_type, member_casual) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(x = rideable_type, y = number_of_rides, fill = member_casual)) + geom_col(position = "dodge") + labs(title ="Number of rides per rideable type" ,x ="Rideable Type",y ="Number of rides")
+```
+
+```{r Average ride length per rideable type}
+combined_trips_v3 %>%
+  group_by(rideable_type, member_casual) %>%
+  summarise(Average_ride_length = mean(ride_length)) %>%
+  ggplot(aes(x = rideable_type, y = Average_ride_length, fill = member_casual)) + geom_col(position = "dodge") + labs(title ="Average ride length per rideable type" , x ="Rideable Type", y ="Average ride length")
+```
+
+```{r Number of rides segmented by rideable types for each month}
+combined_trips_v3 %>%
+  group_by(member_casual, month, rideable_type) %>%
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot (aes(x = month, y = number_of_rides, fill = rideable_type)) + geom_col(position = "dodge2") + facet_wrap(~member_casual) + labs(title = "Number of rides segmented by rideable types for each month", x ="Month", y ="Number of rides") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r Number of rides segmented by rideable types for each day of the week}
+combined_trips_v3 %>%
+  group_by(member_casual, day_of_the_week, rideable_type) %>%
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>%
+  ggplot (aes(x = day_of_the_week, y = number_of_rides, fill = rideable_type)) + geom_col(position = "dodge") + facet_wrap(~member_casual) + labs(title = "Number of rides segmented by rideable types for each day of the week", x = "Day of the week", y = "Number of rides") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r Top 10 most popular start stations for casual riders}
+combined_trips_V2 %>%
+  group_by(start_station_name, member_casual) %>%
+  summarise(number_of_trips = n()) %>%
+  arrange(desc(number_of_trips)) %>%
+  filter(member_casual == "casual", number_of_trips >= 15460) %>%
+  select(start_station_name, number_of_trips) %>%
+  ggplot(aes(x = start_station_name, y = number_of_trips)) + geom_col(fill ="blue") + coord_flip() + labs(title = "Top 10 most popular start stations for casual riders", x = "Start station name", y = "Number of trips")
+  
+```
+
+```{r Top 10 most popular end stations for casual riders}
+combined_trips_V2 %>%
+  group_by(end_station_name, member_casual) %>%
+  summarise(number_of_trips = n()) %>%
+  arrange(desc(number_of_trips)) %>%
+  filter(member_casual == "casual", number_of_trips >= 15596) %>%
+  select(end_station_name, number_of_trips) %>%
+  ggplot(aes(x = end_station_name, y = number_of_trips)) + geom_col(fill ="red") + coord_flip() + labs(title = "Top 10 most popular end stations for casual riders", x = "End station name", y = "Number of trips")
+```
+
+Next, We will proceed to Tableau and explore more data visualizations. I have saved this global environment on my desktop as a RDATA file. I will also save these data frames as CSV files on my local desktop for further analysis in Tableau.
+
+```{r}
+write.csv(top_routes,"D:\\Google DA\\Capstone\\Cyclistic Data\\Top_routes.csv", row.names=FALSE)
+
+write.csv(combined_trips_v3,"D:\\Google DA\\Capstone\\Cyclistic Data\\combined_trips_v3.csv", row.names=FALSE)
+
+write.csv(top_routes_1,"D:\\Google DA\\Capstone\\Cyclistic Data\\Top_routes_1.csv", row.names=FALSE)
+
+write.csv(lat_long,"D:\\Google DA\\Capstone\\Cyclistic Data\\lat_long.csv", row.names=FALSE)
+```
+
